@@ -77,7 +77,26 @@ def preprocessing(data, num_imputer, bin_imputer, transformer, scaler):
     norm_df['SK_ID_CURR'] = data['SK_ID_CURR']
     return norm_df
 
+def request_prediction(model_uri, data):
+    """This function requests the API by sending customer data
+    and receiving API responses with predictions (score, application status).
+    """
+    headers = {"Content-Type": "application/json"}
+    data_json = data.to_dict(orient="records")[0]
 
+    # Dashboard request
+    response = requests.request(method='GET', headers=headers,
+                                url=model_uri, json=data_json)
+    if response.status_code != 200:
+        raise Exception("Request failed with status {}, {}".format(
+                response.status_code, response.text))
+
+    # API response
+    api_response = response.json()
+    score = api_response['score']
+    situation = api_response['class']
+    status = api_response['application']
+    return score, situation, status
 
 def load_model(file, key):
     """This function is used to load a serialized file."""
