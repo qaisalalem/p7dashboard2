@@ -170,7 +170,7 @@ def main():
 
     #Dashboard request
     # remote api
-    API_URI ='https://loanriskp7.herokuapp.com/'
+    API_URI ='https://loanriskp7.herokuapp.com/predict'
     # Local API URI
     #API_URI = 'http://127.0.0.1:5000/predict'
     score, result, status = request_prediction(API_URI, X)
