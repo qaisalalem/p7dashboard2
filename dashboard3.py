@@ -220,7 +220,8 @@ def main():
     
     
     st.header('''Credit application result''')
-
+    st.write("* **The credit score is between 0 & 100. "
+             "Clients with a score greater than *37* are at risk of default.**")
     st.write("* **Class 0: client does not default**")
     st.write("* **Class 1: client defaults**")
     st.write("Client N°{} credit score is **{}**. "
