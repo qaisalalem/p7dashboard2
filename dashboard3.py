@@ -27,7 +27,7 @@ import plotly.figure_factory as ff
 
 plt.style.use('seaborn')
 import math as m
-
+import altair as alt
 
 def load_data(file):
     """This function is used to load the dataset."""
@@ -35,6 +35,7 @@ def load_data(file):
     data_path = os.path.join(folder, file)
     data = pd.read_csv(data_path, encoding_errors='ignore')
     return data
+    
 
 
 def preprocessing(data, num_imputer, bin_imputer, transformer, scaler):
@@ -74,6 +75,9 @@ def preprocessing(data, num_imputer, bin_imputer, transformer, scaler):
     norm_df['SK_ID_CURR'] = data['SK_ID_CURR']
     return norm_df
 
+
+
+
 def request_prediction(model_uri, data):
     """This function requests the API by sending customer data
     and receiving API responses with predictions (score, application status).
@@ -84,16 +88,20 @@ def request_prediction(model_uri, data):
     # Dashboard request
     response = requests.request(method='GET', headers=headers,
                                 url=model_uri, json=data_json)
+
+    # API response
     if response.status_code != 200:
         raise Exception("Request failed with status {}, {}".format(
                 response.status_code, response.text))
 
-    # API response
     api_response = response.json()
     score = api_response['score']
     result = api_response['class']
     status = api_response['application']
-    return score, result, status
+    dataviz = api_response['dataviz']
+    shap_features = api_response['shap_features']
+    return score, result, status, dataviz, shap_features
+
 
 
 def load_model(file, key):
@@ -111,6 +119,22 @@ def main():
     st.subheader('Data of selected client')
     
     # Loading the dataset
+    relevant_features= ['POS_SK_DPD_DEF','BUR_DAYS_CREDIT_ENDDATE','BUR_AMT_CREDIT_SUM','BUR_AMT_CREDIT_SUM_DEBT',
+                        'BUR_AMT_CREDIT_SUM_OVERDUE','BUR_DAYS_CREDIT_UPDATE','PAY_HIST_NUM_INSTALMENT_VERSION',
+                        'PAY_HIST_NUM_INSTALMENT_NUMBER','PAY_HIST_DAYS_INSTALMENT','PAY_HIST_AMT_INSTALMENT',
+                        'POS_CNT_INSTALMENT','POS_SK_DPD','NAME_EDUCATION_TYPE_Secondary / secondary special',
+                        'PREV_APPLICATION_NUMBER','PREV_AMT_ANNUITY','PREV_AMT_DOWN_PAYMENT',
+                        'PREV_AMT_CREDIT','PREV_RATE_DOWN_PAYMENT','PREV_CNT_PAYMENT',
+                        'NAME_CONTRACT_TYPE','FLAG_OWN_CAR','NAME_EDUCATION_TYPE_Higher education',
+                        'REG_CITY_NOT_LIVE_CITY','CODE_GENDER_F','NAME_FAMILY_STATUS_Married',
+                        'BUR_DAYS_CREDIT','BUR_CNT_CREDIT_PROLONG','REGION_RATING_CLIENT',
+                        'DAYS_EMPLOYED','DAYS_REGISTRATION','DAYS_ID_PUBLISH',
+                        'PAYMENT_RATE','HOUR_APPR_PROCESS_START','EXT_SOURCE_2',
+                        'EXT_SOURCE_3','OBS_30_CNT_SOCIAL_CIRCLE','DEF_30_CNT_SOCIAL_CIRCLE',
+                        'DAYS_LAST_PHONE_CHANGE','AMT_ANNUITY','AMT_CREDIT',
+                        'AMT_INCOME_TOTAL','AMT_REQ_CREDIT_BUREAU_QRT','AMT_REQ_CREDIT_BUREAU_YEAR',
+                        'ANNUITY_INCOME_RATE','INCOME_CREDIT_RATE','DAYS_BIRTH',
+                        'REGION_POPULATION_RELATIVE']
     data = load_data('data/data.csv')
 
     # Loading the model
@@ -169,11 +193,10 @@ def main():
     X= X[relevant_features]
 
     #Dashboard request
-    # remote api
-    API_URI ='https://loanriskp7.herokuapp.com/predict'
     # Local API URI
+    API_URI ='https://loanriskp7.herokuapp.com/predict'
     #API_URI = 'http://127.0.0.1:5000/predict'
-    score, result, status = request_prediction(API_URI, X)
+    score, result, status, dataviz, shap_features = request_prediction(API_URI, X)
     
     #Visualisation according to new advice
     dash=data.drop(['SK_ID_CURR'], axis=1)
@@ -198,7 +221,6 @@ def main():
     
     st.header('''Credit application result''')
 
-    #score, situation, status = request_prediction(API_URI, X)
     st.write("* **Class 0: client does not default**")
     st.write("* **Class 1: client defaults**")
     st.write("Client N°{} credit score is **{}**. "
@@ -206,12 +228,7 @@ def main():
                  "the credit application is **{}**.".format(customer_id, score,
                                                            result, status))
     best_threshold = 0.37
-    # if customer_class == 0: 
-    #     st.success("Client's loan application is successful :thumbsup:")
-    # else: 
-    #     st.error("Client's loan application is unsuccessful :thumbsdown:") 
 
-    #visualisation showing score and threshold
     def color(status):
         '''Définition de la couleur selon la prédiction'''
         if status=='accepted':
@@ -279,43 +296,32 @@ def main():
     st.pyplot()
 
 
-
-
-  
-    # Feature importance
-    model.predict(np.array(X_norm[relevant_features]))
-    features_importance = model.feature_importances_
-    sorted = np.argsort(features_importance)
-    dataviz = pd.DataFrame(columns=['feature', 'importance'])
-    dataviz['feature'] = np.array(X_norm[relevant_features].columns)[sorted]
-    dataviz['importance'] = features_importance[sorted]
-    dataviz = dataviz[dataviz['importance'] > 200]
-    dataviz.reset_index(inplace=True, drop=True)
-    dataviz = dataviz.sort_values(['importance'], ascending=False)
-
-    # SHAP explanations
-    shap.initjs()
-    shap_explainer = shap.TreeExplainer(model)
-    shap_values = shap_explainer.shap_values(X)
-    shap_df = pd.DataFrame(
-        list(zip(X[relevant_features].columns, np.abs(shap_values[0]).mean(0))),
-        columns=['feature', 'importance'])
-    shap_df = shap_df.sort_values(by=['importance'], ascending=False)
-    shap_df.reset_index(inplace=True, drop=True)
-    shap_features = list(shap_df.iloc[0:20, ].feature)
+    
 
     #plotting global feature importance.
+     # Convert the DataFrame to a list of dictionaries
+    dataviz = pd.DataFrame(dataviz)
+    dataviz_list = dataviz.to_dict(orient='records')
+    dataviz_list = pd.DataFrame(dataviz_list)
+    dataviz_list =dataviz_list.sort_values(by='importance', ascending=False)
+
     st.header("Global Interpretability")
     fig9 = plt.figure(figsize=(10, 10))
-    sns.barplot(x='importance', y='feature', data=dataviz)
+    sns.barplot(x='importance', y='feature', data=dataviz_list)
     st.write("This level of interpretability is about understanding how the model makes decisions, based on a holistic view of its features.")
     st.write("This stays the same for all clients")
     st.write(fig9)
+   
 
-    #plotting local feature importance.
+    # #plotting local feature importance.
+    shap.initjs()
+    shap_features=pd.DataFrame(shap_features)
+    shap_features=shap_features.to_dict(orient='records')
+    shap_features=pd.DataFrame(shap_features)
+
     st.header("Local Interpretability")
     fig10 = plt.figure()
-    shap.summary_plot(shap_values, X,
+    shap.summary_plot(shap_features, X,
                         feature_names=list(X.columns),
                         max_display=15,
                         plot_type='bar',
@@ -323,7 +329,6 @@ def main():
     st.write("This level of interpretability is about understanding a single prediction of a model.")
     st.write("This is unique for each client.")
     st.pyplot(fig10)
-
 
     
 if __name__ == '__main__':
